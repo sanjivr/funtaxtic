@@ -33,6 +33,16 @@ class Deposit(object):
           raise Exception("Unknown property [" + key +"]")
 
   @property
+  def id(self):
+    try:
+      return self._id
+    except AttributeError:
+      return None
+
+  @id.setter
+  def id(self, value):
+    self._id = value
+  @property
   def principal(self):
     try:
       return self._principal
@@ -111,6 +121,34 @@ class Deposit(object):
       days = timedelta(self.duration_days)
     return self.started + days   
 
+  def tax_statement(self, sdate=None, edate=None):
+    if sdate is None or edate is None:
+      raise Exception("Missing parameters")
+    if sdate > edate :
+      raise Exception("Start date should precede end date")
+      
+
+    print "Calculating Income for tax period {0} {1} ".format(sdate, edate)
+    if sdate > self.matures():
+      print "Already Matured"
+      return
+  
+    print max(sdate, self.started), self.compound(target_date = max(sdate,
+          self.started))   
+    print min(edate, self.matures()), self.compound(target_date = min(edate,
+          self.matures()))
+
+  def returns(self):
+    for year in range(self.started.year, self.matures().year+1):
+      sdate = date(year, 1, 1)
+      edate = date(year, 12, 31)
+      self.tax_statement(sdate=sdate, edate=edate)
+    for year in range(self.started.year, self.matures().year+1):
+      sdate = date(year, 4, 1)
+      edate = date(year+1, 3, 31)
+      self.tax_statement(sdate=sdate, edate=edate)
+      
+    
       
   def statement(self):
     for month_end in Utils.iterate_months(sdate = self.started, 
@@ -131,9 +169,7 @@ class Deposit(object):
     return self.principal * ((1+ self._rate/self.interval))**(self.interval * duration) - self.principal
 
 def main():
-  a = Deposit(rate=9, principal=750000.0, interval=4, duration=2, started = "21/11/2014")
-  pprint(vars(a))
-  a.statement()
+  a = Deposit(rate=8.5, principal= 400000.0, interval=4, duration_days=366, started="26/05/2012")
 
 if __name__ == "__main__":
   main()
