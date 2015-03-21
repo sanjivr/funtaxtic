@@ -1,160 +1,11 @@
 #!/usr/bin/python
+import sys
+sys.path.append('.')
 from datetime import datetime, date, timedelta
-import calendar
 from pprint import pprint
-
-class PeriodDuration(object):
-  def __init__(self, **kwargs):
-    self.duration_rate = []
-    for key, value in kwargs.items():
-      if hasattr(self, key):
-          setattr(self, key, value)
-      else:
-          raise Exception("Unknown property [" + key +"]")
-
-  @property
-  def start(self):
-    try:
-      return self._start
-    except AttributeError:
-      return None
-
-  @start.setter
-  def start(self, value):
-    if isinstance(value, str):
-      self._start = datetime.strptime(value, "%d/%m/%Y").date()
-    elif isinstance(value, date):  
-      self._start = value
-
-  @property
-  def end(self):
-    try:
-      return self._end
-    except AttributeError:
-      return None
-
-  @end.setter
-  def end(self, value):
-    if isinstance(value, str):
-      self._end= datetime.strptime(value, "%d/%m/%Y").date()
-    elif isinstance(value, date):  
-      self._end= value
-
-  @property
-  def duration_rate(self):
-    try:
-      return self._duration_rate 
-    except AttributeError:
-      return []
-
-  @duration_rate.setter
-  def duration_rate(self, value):
-      self._duration_rate = value
-    
-  def __eq__(self, other):
-    return self.start <= other and other < self.end
-
-  def __str__(self):
-    return "(%s %s %s)" %(self.start, self.end, self.duration_rate)
-
-  def __repr__(self):
-    return str(self)
-
-class DurationRate(object):
-  def __init__(self, **kwargs):
-    for key, value in kwargs.items():
-      if hasattr(self, key):
-          setattr(self, key, value)
-      else:
-          raise Exception("Unknown property [" + key +"]")
-
-  def __eq__(self, other):
-    return self.min <= other and other < self.max
-
-  @property
-  def min(self):
-    try:
-      return self._min
-    except AttributeError:
-      return None
-
-  @min.setter
-  def min(self, value):
-      self._min = int(value)
-
-  @property
-  def max(self):
-    try:
-      return self._max
-    except AttributeError:
-      return None
-
-  @max.setter
-  def max(self, value):
-      self._max= int(value)
-
-
-  @property
-  def rate(self):
-    try:
-      return self._rate
-    except AttributeError:
-      return None
-      
-  @rate.setter
-  def rate(self, value):
-      self._rate = float(value)
-
-  def __str__(self):
-    return "(%d %d %f)" %(self.min, self.max, self.rate)
-
-  def __repr__(self):
-    return str(self)
-
-class Utils:
-  @classmethod
-  def last_day_of_month(cls, date_val=datetime.today().date()):
-    return date(date_val.year, date_val.month, calendar.monthrange(date_val.year, date_val.month)[1])
-  
-  @classmethod  
-  def iterate_months(cls, sdate=None, tdate=None):
-    if sdate is None or tdate is None:
-      raise Exception("missing parameters")
-
-    while True:
-      cur_month_end=cls.last_day_of_month(sdate)
-      if cur_month_end >= tdate:
-        yield(tdate)
-        break
-      yield(cur_month_end)
-      sdate = cur_month_end + timedelta(days=1)
-
-  @classmethod
-  def renew_deposit(cls, deposit=None, period_duration_lookup=None, collector=[]):
-    if deposit is None:
-      return 
-    today = datetime.now().date()   
-    if deposit.matures() < deposit.closed or (deposit.matures() == deposit.closed and deposit.matures() < today): 
-      id = deposit.id
-      interval = deposit.interval
-      duration_days = deposit.duration_days
-      duration = deposit.duration
-      started = deposit.matures() + timedelta(days = 1)
-      principal = deposit.principal + (0.9 * deposit.compound())
-      #Lookup
-      rate = deposit.rate
-      if deposit.matures() != deposit.closed:
-        closed = deposit.closed
-      else:  
-         closed = None
-      renewed_deposit = Deposit(id=id, interval=interval, duration_days=duration_days, duration=duration, started=started, principal=principal, closed = closed, rate=rate)
-      renewed_deposit.reset(period_duration_lookup=period_duration_lookup)
-      collector.append(renewed_deposit)
-      if not renewed_deposit.premature:
-        Utils.renew_deposit(deposit=renewed_deposit, period_duration_lookup=period_duration_lookup, collector=collector)
-    else:
-      return 
-
+from utils import Utils
+from period_duration import PeriodDuration
+from duration_rate import DurationRate
 
 #Has to derive from object inorder to use property annotation
 class Deposit(object):
@@ -166,9 +17,6 @@ class Deposit(object):
           setattr(self, key, value) 
         else:
           raise Exception("Unknown property [" + key +"]")
-    if self.closed is None:
-       self.closed = self.matures()   
-
   @property
   def id(self):
     try:
@@ -282,7 +130,6 @@ class Deposit(object):
     if self.duration is None:
      setattr(self, 'duration', float(value)/365)
   
- 
   def matures(self):
     days = None
     if self.duration_days is None:
@@ -291,6 +138,44 @@ class Deposit(object):
       days = timedelta(self.duration_days)
     return self.started + days   
 
+  def is_closed(self):
+      return self.closed is not None
+  
+  def ended(self):
+    if self.is_closed():
+      return min(self.matures(), self.closed)
+    else:
+      return self.matures()
+
+  def __cmp__(self, other):
+    if self.id == other.id:
+      if self.started < other.started:
+        return -1
+      elif self.started == other.started:
+        return 0
+      else:
+        return 1
+    else: 
+      if self.id < other.id:
+        return -1
+      else:
+        return 1
+
+  def __repr__(self):
+    return "{0} {1} {2} {3} {4} {5}".format(self.id, self.started, self.ended(), self.duration_days, self.rate, int(self.principal))
+
+  def should_renew(self):
+    # Closed Account
+    if self.is_closed():
+      # Parent Node - True (parent account, maturity date < close date)
+      # Leaf Node - False  (leaf account, maturity date >= close date)
+      return self.matures() < self.closed
+    # Open Account
+    else:  
+      # Parent Node - True (parent account, maturity date < today)
+      # Leaf Node - False  (active account, maturity date >= today)
+      return self.matures()  < datetime.now().date()
+      
   def tax_statement(self, sdate=None, edate=None):
     if sdate is None or edate is None:
       raise Exception("Missing parameters")
@@ -298,31 +183,28 @@ class Deposit(object):
       raise Exception("Start date should precede end date")
       
 
-    print "Calculating Income for tax period {0} {1} ".format(sdate, edate)
-    if sdate > self.matures() or sdate > self.closed :
-      print "Already Matured"
+    #print "Calculating Income for tax period {0} {1} ".format(sdate, edate)
+    if sdate > self.ended():
+      #  print "Already Matured"
       return
-  
-    print max(sdate, self.started), self.compound(target_date = max(sdate,
-          self.started))   
-    print min(edate, self.matures(), self.closed), self.compound(target_date = min(edate,
-          self.matures(), self.closed))
+    calc_sdate = max(sdate, self.started)
+    calc_edate = min(edate, self.ended())
+    interest_earned = self.compound(target_date = calc_edate) - \
+                      self.compound(target_date = calc_sdate)
+    return "[{0} - {1}]: {2}".format(calc_sdate, calc_edate, int(interest_earned))
 
   def returns(self):
-    for year in range(self.started.year, min(self.closed, self.matures()).year+1):
+    for year in range(self.started.year, self.ended().year+1):
       sdate = date(year, 1, 1)
       edate = date(year, 12, 31)
       self.tax_statement(sdate=sdate, edate=edate)
-    for year in range(self.started.year, min(self.closed, self.matures()).year+2):
+    for year in range(self.started.year, self.ended().year+2):
       sdate = date(year, 4, 1)
       edate = date(year+1, 3, 31)
       self.tax_statement(sdate=sdate, edate=edate)
       
-    
-      
   def statement(self):
-    for month_end in Utils.iterate_months(sdate = self.started, 
-        tdate = min(self.matures(), self.closed)):
+    for month_end in Utils.iterate_months(sdate = self.started, tdate = self.ended()):
       print month_end, self.compound(target_date=month_end)
 
   def compound(self, target_date=None):
@@ -341,21 +223,42 @@ class Deposit(object):
     return self.principal * ((1+ self._rate/self.interval))**(self.interval * duration) - self.principal
 
   def reset(self, period_duration_lookup=None):
+    duration_rate_lookup = period_duration_lookup[period_duration_lookup.index(self.started)].duration_rate
     if self.closed < self.matures():
        #use self.started to figure out period duration lookup entry
-       duration_rate_lookup = period_duration_lookup[period_duration_lookup.index(self.started)].duration_rate
-       self.duration = float(self.duration_days)/365
        self.duration_days = (self.closed - self.started).days
+       self.duration = float(self.duration_days)/365
+       # Premature closure penalty = 0.5 %
        self.rate = duration_rate_lookup[duration_rate_lookup.index(self.duration_days)].rate - 0.5
        self.premature = True
     else:
-      pass
+       self.rate = duration_rate_lookup[duration_rate_lookup.index(self.duration_days)].rate 
 
-def main():
-  a = Deposit(closed="28/12/2012", rate=8.5, principal= 400000.0, interval=4, duration_days=555, started="26/05/2012")
-  pprint(vars(a))
-  a.returns()
-  a.statement()
+  """
+    @arg deposit : [Deposit] First Deposit
+    @arg period_duration_lookup : 
+    @arg collector: [List[Deposit]] List of renewed deposits till date
+  """
+  @classmethod
+  def renew_deposit(cls, deposit=None, period_duration_lookup=None, collector=[]):
+    if deposit is None:
+      return 
+    if deposit.should_renew():
+      id = deposit.id
+      interval = deposit.interval
+      duration_days = deposit.duration_days
+      duration = deposit.duration
+      started = deposit.matures() + timedelta(days = 1)
+      # 10% TDS
+      principal = deposit.principal + (0.9 * deposit.compound())
+      rate = deposit.rate
+      closed = deposit.closed
+      renewed_deposit = Deposit(id=id, interval=interval, duration_days=duration_days, duration=duration, started=started, principal=principal, closed = closed, rate=rate)
+      # Reset Attributes of New Deposit
+      renewed_deposit.reset(period_duration_lookup=period_duration_lookup)
+      collector.append(renewed_deposit)
+      if not renewed_deposit.premature:
+        Deposit.renew_deposit(deposit=renewed_deposit, period_duration_lookup=period_duration_lookup, collector=collector)
+    else:
+      return 
 
-if __name__ == "__main__":
-  main()
