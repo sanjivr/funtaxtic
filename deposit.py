@@ -162,7 +162,7 @@ class Deposit(object):
         return 1
 
   def __repr__(self):
-    return "{0} {1} {2} {3} {4} {5}".format(self.id, self.started, self.ended(), self.duration_days, self.rate, int(self.principal))
+    return "{0} {1} {2} {3} {4:5.2f} {5}".format(self.id, self.started, self.ended(), self.duration_days, self.rate, int(self.principal))
 
   def should_renew(self):
     # Closed Account
@@ -191,7 +191,7 @@ class Deposit(object):
     calc_edate = min(edate, self.ended())
     interest_earned = self.compound(target_date = calc_edate) - \
                       self.compound(target_date = calc_sdate)
-    return "[{0} - {1}]: {2}".format(calc_sdate, calc_edate, int(interest_earned))
+    return "[{0} - {1}]: {2}, {3}".format(calc_sdate, calc_edate, int(self.principal+ interest_earned),int(interest_earned))
 
   def returns(self):
     for year in range(self.started.year, self.ended().year+1):
@@ -228,12 +228,14 @@ class Deposit(object):
        #use self.started to figure out period duration lookup entry
        self.duration_days = (self.closed - self.started).days
        self.duration = float(self.duration_days)/365
+       self.rate = duration_rate_lookup[duration_rate_lookup.index(self.duration_days)].rate
        # Premature closure penalty = 0.5 %
-       self.rate = duration_rate_lookup[duration_rate_lookup.index(self.duration_days)].rate - 0.5
+       self.rate = self.rate - 0.5
        self.premature = True
     else:
        self.rate = duration_rate_lookup[duration_rate_lookup.index(self.duration_days)].rate 
 
+      
   """
     @arg deposit : [Deposit] First Deposit
     @arg period_duration_lookup : 
