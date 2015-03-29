@@ -189,6 +189,8 @@ class Deposit(object):
       return
     calc_sdate = max(sdate, self.started)
     calc_edate = min(edate, self.ended())
+    if calc_sdate > calc_edate:
+      return
     interest_earned = self.compound(target_date = calc_edate) - \
                       self.compound(target_date = calc_sdate)
     return "[{0} - {1}]: {2}, {3}".format(calc_sdate, calc_edate, int(self.principal+ interest_earned),int(interest_earned))
