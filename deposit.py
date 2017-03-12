@@ -206,7 +206,7 @@ class Deposit(object):
       self.tax_statement(sdate=sdate, edate=edate)
       
   def statement(self):
-    for month_end in Utils.iterate_months(sdate = self.started, tdate = self.ended()):
+    for month_end in Utils.iterate_months(sdate = self.started, edate = self.ended()):
       print month_end, self.compound(target_date=month_end)
 
   def compound(self, target_date=None):
