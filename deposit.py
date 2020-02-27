@@ -2,12 +2,14 @@
 import sys
 sys.path.append('.')
 from datetime import datetime, date, timedelta
+import functools
 from pprint import pprint
 from utils import Utils
 from period_duration import PeriodDuration
 from duration_rate import DurationRate
 
 #Has to derive from object inorder to use property annotation
+@functools.total_ordering
 class Deposit(object):
 
   def __init__(self, **kwargs):
@@ -147,19 +149,11 @@ class Deposit(object):
     else:
       return self.matures()
 
-  def __cmp__(self, other):
-    if self.id == other.id:
-      if self.started < other.started:
-        return -1
-      elif self.started == other.started:
-        return 0
-      else:
-        return 1
-    else: 
-      if self.id < other.id:
-        return -1
-      else:
-        return 1
+  def __eq__(self, other):
+    return self.id == other.id and self.started == other.started
+
+  def __lt__(self, other):
+    return self.id < other.id
 
   def __repr__(self):
     return "{0} {1} {2} {3} {4:5.2f} {5}".format(self.id, self.started, self.ended(), self.duration_days, self.rate, int(self.principal))
@@ -183,9 +177,9 @@ class Deposit(object):
       raise Exception("Start date should precede end date")
       
 
-    #print "Calculating Income for tax period {0} {1} ".format(sdate, edate)
+    #print("Calculating Income for tax period {0} {1} ".format(sdate, edate))
     if sdate > self.ended():
-      #  print "Already Matured"
+      #  print("Already Matured")
       return
     calc_sdate = max(sdate, self.started)
     calc_edate = min(edate, self.ended())
@@ -207,7 +201,7 @@ class Deposit(object):
       
   def statement(self):
     for month_end in Utils.iterate_months(sdate = self.started, edate = self.ended()):
-      print month_end, self.compound(target_date=month_end)
+      print(month_end, self.compound(target_date=month_end))
 
   def compound(self, target_date=None):
     duration = None
